@@ -3,6 +3,7 @@ import {
   LoroDoc,
   LoroEventBatch,
   Subscription,
+  VersionVector,
 } from "loro-crdt";
 import {
   ServerConnection,
@@ -17,7 +18,7 @@ import {
   writeStartSyncMessage,
 } from "../../../common/loro/syncProtocol";
 import { logger } from "../../logger";
-import { createPromise, createPromiseLock, PromiseLock } from "../promise";
+import { createPromiseLock, PromiseLock } from "../promise";
 import { LoroCoordinator } from "./coordinator/coordinator";
 import { LoroDocPersister } from "./persister/interface/persister";
 
@@ -27,6 +28,7 @@ type LoroDocController = {
   doc: LoroDoc;
   conns: Set<ServerConnection>;
   loadPromise: Promise<void>;
+  lastSaveVV: VersionVector | null;
   lastEB: LoroEventBatch | null;
   subscriptions: Subscription[];
   lock: PromiseLock;
@@ -68,13 +70,17 @@ export class ServerNetworkSetupTool {
         `[setupNetwork] controller of ${guid} not found, create new one`,
       );
       const doc = new LoroDoc();
-      const loadPromise = this.persister.load(docId, location, doc);
+      const loadPromise = (async () => {
+        await this.persister.ensureDoc(docId, location);
+        await this.persister.loadBatch(docId, location, doc);
+      })();
       controller = {
         docId,
         guid,
         doc,
         loadPromise,
         lastEB: null,
+        lastSaveVV: null,
         conns: new Set(),
         subscriptions: [],
         lock: createPromiseLock(),
@@ -119,8 +125,10 @@ export class ServerNetworkSetupTool {
     // Wait for local doc to be loaded
     const location = this.conn2location.get(conn)!;
     const localDocController = this._loadDoc(msg.docId, location, conn);
+
     await localDocController.loadPromise;
     const localDoc = localDocController.doc;
+    localDocController.lastSaveVV = localDoc.version();
 
     const canSync = this.coordinator.checkDoc(localDoc, remoteDoc);
     if (canSync) {
@@ -204,7 +212,16 @@ export class ServerNetworkSetupTool {
             from: localDoc.frontiersToVV(meta.startFrontiers),
           });
           logger.debug(`[setupNetwork] can apply`);
-          this.persister.saveNewUpdates(localDocController.docId, localDoc);
+          const updatesToSave = localDoc.export({
+            mode: "update",
+            from: localDocController.lastSaveVV!,
+          });
+          this.persister.saveUpdates(
+            localDocController.docId,
+            localDocController.location,
+            [updatesToSave],
+          );
+          localDocController.lastSaveVV = localDoc.version();
           logger.debug(`[setupNetwork] saveNewUpdates`);
           logger.debug(
             `[setupNetwork] broadcast the update to all ${localDocController.conns.size} connected clients`,

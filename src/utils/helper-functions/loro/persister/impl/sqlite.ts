@@ -1,15 +1,10 @@
-import { LoroDoc, VersionVector } from "loro-crdt";
-import Database from "better-sqlite3";
-import { type Database as SqliteDatabase, SqliteError } from "better-sqlite3";
+import Database, {
+  type Database as SqliteDatabase,
+  SqliteError,
+} from "better-sqlite3";
+import { LoroDoc } from "loro-crdt";
 import { captureError } from "../../../error";
 import { LoroDocPersister } from "../interface/persister";
-
-type LoroDocPersistController = {
-  docId: string;
-  lastSavedVersion: VersionVector;
-  location: string;
-  db: SqliteDatabase;
-};
 
 const tableExists = (db: SqliteDatabase, tableName: string) => {
   const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`;
@@ -23,13 +18,18 @@ const encodeDocId = (docId: string): string => {
   });
 };
 
+const decodeDocId = (encodedDocId: string): string => {
+  return encodedDocId.replace(/_x([0-9a-fA-F]+)_/g, (_, charCode) => {
+    return String.fromCharCode(parseInt(charCode, 16));
+  });
+};
+
 const getSnapshotTableName = (docId: string) =>
   `doc_snapshot_${encodeDocId(docId)}`;
 const getUpdatesTableName = (docId: string) =>
   `doc_updates_${encodeDocId(docId)}`;
 
 export class SqliteLoroDocPersister implements LoroDocPersister {
-  private controllers: Map<string, LoroDocPersistController> = new Map();
   private dbs: Map<string, SqliteDatabase> = new Map(); // location -> db
 
   private _openExistedDb(location: string): SqliteDatabase {
@@ -41,11 +41,11 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
     return db;
   }
 
-  private _prepareDbForDoc(
+  async ensureDoc(
     docId: string,
-    doc: LoroDoc,
     location: string,
-    createIfNotExists: boolean = false,
+    snapshot?: Uint8Array,
+    updates?: Uint8Array[],
   ) {
     const result = captureError(
       () => this._openExistedDb(location),
@@ -54,10 +54,7 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
     const snapshotTableName = getSnapshotTableName(docId);
     const updatesTableName = getUpdatesTableName(docId);
     if (result.type === "err") {
-      if (!createIfNotExists) {
-        throw result.error; // db does not exist, and we don't want to create it
-      }
-      // db does not exist, create it
+      // 如果数据库不存在，则创建新数据库
       const db = new Database(location, { fileMustExist: false });
       db.prepare(
         `CREATE TABLE ${snapshotTableName} (snapshot BLOB NOT NULL)`,
@@ -65,138 +62,167 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
       db.prepare(
         `CREATE TABLE ${updatesTableName} (update_ BLOB NOT NULL)`,
       ).run();
-      const snapshot = doc.export({ mode: "snapshot" });
+      // 插入初始 snapshot
+      snapshot ??= new LoroDoc().export({ mode: "snapshot" });
       const snapshotBuffer = Buffer.from(snapshot);
       db.prepare(`INSERT INTO ${snapshotTableName} (snapshot) VALUES (?)`).run(
         snapshotBuffer,
       );
+      // 插入初始 updates
+      updates ??= [];
+      if (updates.length > 0) {
+        const stmt = db.prepare(
+          `INSERT INTO ${updatesTableName} (update_) VALUES (?)`,
+        );
+        const insertMany = db.transaction((updates) => {
+          for (const update of updates) {
+            stmt.run(Buffer.from(update));
+          }
+        });
+        insertMany(updates);
+      }
       this.dbs.set(location, db);
-      return db;
     } else {
-      // db existed, check if it contains tables for this doc
+      // 数据库已经存在，则确保相关表存在
       const db = result.value;
+      // 如果 snapshot 表不存在，则创建
       if (!tableExists(db, snapshotTableName)) {
-        // snapshot table does not exist, create it
-        const snapshot = doc.export({ mode: "snapshot" });
-        const snapshotBuffer = Buffer.from(snapshot);
         db.prepare(
           `CREATE TABLE ${snapshotTableName} (snapshot BLOB NOT NULL)`,
         ).run();
+        // 插入初始 snapshot
+        snapshot ??= new LoroDoc().export({ mode: "snapshot" });
+        const snapshotBuffer = Buffer.from(snapshot);
         db.prepare(
           `INSERT INTO ${snapshotTableName} (snapshot) VALUES (?)`,
         ).run(snapshotBuffer);
       } else {
-        // snapshot table exists, but empty, insert snapshot
-        const fstRowId = db
-          .prepare(`SELECT rowid FROM ${snapshotTableName}`)
+        // 如果 snapshot 表存在，但为空
+        const firstRowId = db
+          .prepare(`SELECT rowid FROM ${snapshotTableName} LIMIT 1`)
           .pluck()
           .get();
-        if (!fstRowId) {
-          const snapshot = doc.export({ mode: "snapshot" });
+        if (firstRowId == null) {
+          // 插入初始 snapshot
+          snapshot ??= new LoroDoc().export({ mode: "snapshot" });
           const snapshotBuffer = Buffer.from(snapshot);
           db.prepare(
             `INSERT INTO ${snapshotTableName} (snapshot) VALUES (?)`,
           ).run(snapshotBuffer);
         }
       }
-
+      // 如果 updates 表不存在，则创建
       if (!tableExists(db, updatesTableName)) {
-        // updates table does not exist, create it
         db.prepare(
           `CREATE TABLE ${updatesTableName} (update_ BLOB NOT NULL)`,
         ).run();
       }
-      return db;
     }
   }
 
-  private _loadSnapshotAndUpdates(db: SqliteDatabase, docId: string) {
-    const snapshotTable = getSnapshotTableName(docId);
-    const updatesTable = getUpdatesTableName(docId);
-    const snapshot = db
-      .prepare(`SELECT snapshot FROM ${snapshotTable}`)
-      .pluck()
-      .get() as Buffer;
-    const updates = db
-      .prepare(`SELECT update_ FROM ${updatesTable}`)
-      .pluck()
-      .all() as Buffer[];
-    return [snapshot, ...updates];
-  }
-
-  createNewDb(location: string) {
-    const db = new Database(location, { fileMustExist: false });
-  }
-
-  // @override
-  async load(
-    docId: string,
-    location: string,
-    doc: LoroDoc,
-    createIfNotExists: boolean = false,
-  ) {
-    const controller = this.controllers.get(docId);
-    if (controller) {
-      const db = controller.db;
-      const snapshotAndUpdates = this._loadSnapshotAndUpdates(db, docId);
-      doc.importBatch(snapshotAndUpdates);
-    } else {
-      const db = this._prepareDbForDoc(docId, doc, location, createIfNotExists);
-      const snapshotAndUpdates = this._loadSnapshotAndUpdates(db, docId);
-      doc.importBatch(snapshotAndUpdates);
-      this.controllers.set(docId, {
-        docId,
-        lastSavedVersion: doc.version(),
-        location,
-        db,
-      });
-    }
-  }
-
-  // @override
-  async saveSnapshot(docId: string, doc: LoroDoc) {
-    const controller = this.controllers.get(docId);
-    if (!controller) {
-      console.error(`No controller for doc ${docId}.`);
-      return;
-    }
-    const db = controller.db;
-    const snapshot = doc.export({ mode: "snapshot" });
-    const snapshotBuffer = Buffer.from(snapshot);
+  async docExists(docId: string, location: string) {
+    const db = this._openExistedDb(location);
     const snapshotTableName = getSnapshotTableName(docId);
     const updatesTableName = getUpdatesTableName(docId);
+    return (
+      tableExists(db, snapshotTableName) && tableExists(db, updatesTableName)
+    );
+  }
+
+  async getAllDocIds(location: string) {
+    const db = this._openExistedDb(location);
+    const allTableNames = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table'`)
+      .pluck()
+      .all() as string[];
+    return allTableNames
+      .filter((name) => name.startsWith("doc_snapshot_"))
+      .map((name) => name.replace("doc_snapshot_", ""))
+      .map((name) => decodeDocId(name));
+  }
+
+  async deleteDoc(docId: string, location: string) {
+    const db = this._openExistedDb(location);
+    const snapshotTableName = getSnapshotTableName(docId);
+    const updatesTableName = getUpdatesTableName(docId);
+    db.prepare(`DROP TABLE IF EXISTS ${snapshotTableName}`).run();
+    db.prepare(`DROP TABLE IF EXISTS ${updatesTableName}`).run();
+    this.dbs.delete(location);
+  }
+
+  async loadSnapshot(docId: string, location: string) {
+    const db = this._openExistedDb(location);
+    const snapshotTableName = getSnapshotTableName(docId);
+    const snapshot = db
+      .prepare(`SELECT snapshot FROM ${snapshotTableName}`)
+      .pluck()
+      .get() as Buffer;
+    return snapshot;
+  }
+
+  async loadUpdates(docId: string, location: string) {
+    const db = this._openExistedDb(location);
+    const updatesTableName = getUpdatesTableName(docId);
+    const updates = db
+      .prepare(`SELECT update_ FROM ${updatesTableName}`)
+      .pluck()
+      .all() as Buffer[];
+    return updates;
+  }
+
+  async loadBatch(docId: string, location: string, doc: LoroDoc) {
+    const snapshot = await this.loadSnapshot(docId, location);
+    const updates = await this.loadUpdates(docId, location);
+    doc.importBatch([snapshot, ...updates]);
+  }
+
+  async saveSnapshot(docId: string, location: string, snapshot: Uint8Array) {
+    const db = this._openExistedDb(location);
+    const snapshotTableName = getSnapshotTableName(docId);
+    const snapshotBuffer = Buffer.from(snapshot);
+    db.prepare(`UPDATE ${snapshotTableName} SET snapshot = ?`).run(
+      snapshotBuffer,
+    );
+  }
+
+  async shrinkDoc(docId: string, location: string) {
+    const db = this._openExistedDb(location);
+    const snapshotTableName = getSnapshotTableName(docId);
+    const updatesTableName = getUpdatesTableName(docId);
+    const snapshot = await this.loadSnapshot(docId, location);
+    const updates = await this.loadUpdates(docId, location);
+    const doc = new LoroDoc();
+    doc.importBatch([snapshot, ...updates]);
+    const shallowSnapshot = doc.export({
+      mode: "shallow-snapshot",
+      frontiers: doc.frontiers(),
+    });
+    const snapshotBuffer = Buffer.from(shallowSnapshot);
     db.prepare(`UPDATE ${snapshotTableName} SET snapshot = ?`).run(
       snapshotBuffer,
     );
     db.prepare(`DELETE FROM ${updatesTableName}`).run();
-    controller.lastSavedVersion = doc.version();
   }
 
-  // @override
-  async saveNewUpdates(docId: string, doc: LoroDoc) {
-    const controller = this.controllers.get(docId);
-    if (!controller) {
-      console.error(`No controller for doc ${docId}.`);
-      return;
-    }
-    const db = controller.db;
-    const newUpdates = doc.export({
-      mode: "update",
-      from: controller.lastSavedVersion,
-    });
-    const newUpdatesBuffer = Buffer.from(newUpdates);
+  async saveUpdates(docId: string, location: string, updates: Uint8Array[]) {
+    const db = this._openExistedDb(location);
     const updatesTableName = getUpdatesTableName(docId);
-    db.prepare(`INSERT INTO ${updatesTableName} (update_) VALUES (?)`).run(
-      newUpdatesBuffer,
-    );
+    const updatesBuffer = updates.map((update) => Buffer.from(update));
+    db.transaction((updates) => {
+      db.prepare(`DELETE FROM ${updatesTableName}`).run();
+      const stmt = db.prepare(
+        `INSERT INTO ${updatesTableName} (update_) VALUES (?)`,
+      );
+      for (const update of updates) {
+        stmt.run(update);
+      }
+    })(updatesBuffer);
   }
 
-  // @override
   async destroy() {
     for (const db of this.dbs.values()) {
       db.close();
     }
     this.dbs.clear();
-    this.controllers.clear();
   }
 }

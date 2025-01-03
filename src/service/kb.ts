@@ -9,6 +9,7 @@ import crypto from "crypto";
 import YAML from "yaml";
 import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister/impl/sqlite";
 import dayjs from "dayjs";
+import { BLOCK_INFO_DOC_NAME } from "../common/constants";
 
 export class KbService extends Service {
   private _configService: ConfigService | null = null;
@@ -76,7 +77,7 @@ export class KbService extends Service {
     const persister = new SqliteLoroDocPersister();
     const date = dayjs().format("YYYYMMDDHHmmss");
     const dbLocation = path.join(location, `db_${date}.sqlite`);
-    persister.createNewDb(dbLocation);
+    persister.ensureDoc(BLOCK_INFO_DOC_NAME, dbLocation);
     // 注册到配置文件中
     const config = this._configService!.getConfig();
     this._configService!.setConfig("knowledgeBases", [

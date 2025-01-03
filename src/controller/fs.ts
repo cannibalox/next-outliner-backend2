@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RESP_CODES } from "../common/constants";
 import {
+  ClearScannedImageSchema,
   FsEnsureAttachmentsDirSchema,
   FsGetAttachmentSignedUrlSchema,
   FsLsSchema,
@@ -20,6 +21,11 @@ import dayjs from "dayjs";
 import crypto from "crypto";
 import mime from "mime";
 import { logger } from "../utils/logger";
+import {
+  generateImageName,
+  parseImageName,
+} from "../common/helper-functions/image-name";
+import { clearScannedImage } from "../utils/helper-functions/image-processing/clearScannedImage";
 
 const ATTACHMENT_FOLDER = "attachments";
 const iv = crypto.randomBytes(16);
@@ -222,6 +228,41 @@ export class FsController extends Controller {
         const encryptedQueryParams = encodeURIComponent(encrypted);
         const signedUrl = `/fs/download-attachment?q=${encryptedQueryParams}`;
         return { signedUrl };
+      },
+    );
+
+    onPost(
+      "/fs/clear-scanned-image",
+      "清除扫描图像的背景",
+      ClearScannedImageSchema.request,
+      ClearScannedImageSchema.result,
+      ["admin", "kb-editor"],
+      async ({ path: relativePath }, req) => {
+        const { location } = req;
+        if (!location)
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无法访问该路径",
+          );
+        const dirname = path.dirname(relativePath);
+        const basename = path.basename(relativePath);
+        const extname = path.extname(basename).slice(1);
+        const parseResult = parseImageName(basename);
+        const outputImageName = parseResult
+          ? // 解析成功，则使用相同的原始文件名，但是更新 nanoid 部分
+            generateImageName(parseResult.originalName, extname)
+          : // 解析失败，则使用新的文件名
+            generateImageName(basename, extname);
+        const inputPath = path.join(location, ATTACHMENT_FOLDER, relativePath);
+        const outputPath = path.join(
+          location,
+          ATTACHMENT_FOLDER,
+          dirname,
+          outputImageName,
+        );
+        const outputRelativePath = path.join(dirname, outputImageName);
+        await clearScannedImage(inputPath, outputPath);
+        return { path: outputRelativePath };
       },
     );
 
