@@ -9,7 +9,8 @@ import crypto from "crypto";
 import YAML from "yaml";
 import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister/impl/sqlite";
 import dayjs from "dayjs";
-import { BLOCK_INFO_DOC_NAME } from "../common/constants";
+import { BLOCK_INFO_DOC_NAME, RESP_CODES } from "../common/constants";
+import { BusinessError } from "../utils/helper-functions/error";
 
 export class KbService extends Service {
   private _configService: ConfigService | null = null;
@@ -50,22 +51,31 @@ export class KbService extends Service {
     // 检查路径是否符合要求
     const prefix = this._configService!.getConfig().newKnowledgeBasePathPrefix;
     if (!location.startsWith(prefix)) {
-      logger.error(`Kb location ${location} must start with ${prefix}`);
-      return;
+      throw new BusinessError(
+        RESP_CODES.PATH_CANNOT_ACCESS,
+        `知识库路径必须是 ${prefix} 的子路径`,
+      );
     }
     // 检查路径是否已存在
     if (fs.existsSync(location)) {
-      logger.error(`Kb location ${location} already exists`);
-      return;
+      if (fs.readdirSync(location).length > 0) {
+        throw new BusinessError(
+          RESP_CODES.PATH_EXISTS_AND_NOT_EMPTY,
+          `路径 ${location} 已存在，且不为空`,
+        );
+      }
+    } else {
+      // 只在路径不存在时创建目录
+      fs.mkdirSync(location, { recursive: true });
     }
-    // 可以创建新的知识库！
-    // 先生成密码哈希
+
+    // 生成密码哈希
     const salt = crypto.randomBytes(16).toString("hex");
     const passwordHash = crypto
       .pbkdf2Sync(password, salt, 100000, 64, "sha512")
       .toString("hex");
-    // 创建知识库目录，并写入配置文件
-    fs.mkdirSync(location, { recursive: true });
+
+    // 写入配置文件
     const configFilePath = path.join(location, "config.yml");
     const configFileContent = YAML.stringify({
       name,
@@ -73,17 +83,43 @@ export class KbService extends Service {
       salt,
     });
     fs.writeFileSync(configFilePath, configFileContent);
-    // 创建空数据库
-    const persister = new SqliteLoroDocPersister();
-    const date = dayjs().format("YYYYMMDDHHmmss");
-    const dbLocation = path.join(location, `db_${date}.sqlite`);
-    persister.ensureDoc(BLOCK_INFO_DOC_NAME, dbLocation);
+
+    // 创建数据库
+    try {
+      const persister = new SqliteLoroDocPersister();
+      const date = dayjs().format("YYYYMMDDHHmmss");
+      const dbLocation = path.join(location, `db_${date}.sqlite`);
+      persister.ensureDoc(BLOCK_INFO_DOC_NAME, dbLocation);
+    } catch (error) {
+      // 如果数据库创建失败，清理已创建的目录
+      fs.rmSync(location, { recursive: true, force: true });
+      throw new BusinessError(
+        RESP_CODES.UNKNOWN_ERROR,
+        `知识库数据库文件创建失败`,
+      );
+    }
+
     // 注册到配置文件中
     const config = this._configService!.getConfig();
     this._configService!.setConfig("knowledgeBases", [
       ...config.knowledgeBases,
       location,
     ]);
+  }
+
+  deleteKb(location: string) {
+    const config = this._configService!.getConfig();
+    if (!config.knowledgeBases.includes(location)) {
+      throw new BusinessError(
+        RESP_CODES.TARGET_NOT_FOUND,
+        `要删除的知识库 ${location} 不存在`,
+      );
+    }
+    const newKnowledgeBases = config.knowledgeBases.filter(
+      (kb) => kb !== location,
+    );
+    this._configService!.setConfig("knowledgeBases", newKnowledgeBases);
+    fs.rmSync(location, { recursive: true, force: true });
   }
 
   getAllKbBaseInfo() {

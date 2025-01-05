@@ -5,6 +5,7 @@ import Database, {
 import { LoroDoc } from "loro-crdt";
 import { captureError } from "../../../error";
 import { LoroDocPersister } from "../interface/persister";
+import { DATA_MAP_NAME } from "../../../../../common/constants";
 
 const tableExists = (db: SqliteDatabase, tableName: string) => {
   const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`;
@@ -179,29 +180,22 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
   async saveSnapshot(docId: string, location: string, snapshot: Uint8Array) {
     const db = this._openExistedDb(location);
     const snapshotTableName = getSnapshotTableName(docId);
+    const updatesTableName = getUpdatesTableName(docId);
     const snapshotBuffer = Buffer.from(snapshot);
     db.prepare(`UPDATE ${snapshotTableName} SET snapshot = ?`).run(
       snapshotBuffer,
     );
+    db.prepare(`DELETE FROM ${updatesTableName}`).run();
   }
 
-  async shrinkDoc(docId: string, location: string) {
+  async shrinkDoc(docId: string, location: string, vacuum: boolean = true) {
     const db = this._openExistedDb(location);
-    const snapshotTableName = getSnapshotTableName(docId);
-    const updatesTableName = getUpdatesTableName(docId);
-    const snapshot = await this.loadSnapshot(docId, location);
-    const updates = await this.loadUpdates(docId, location);
     const doc = new LoroDoc();
-    doc.importBatch([snapshot, ...updates]);
-    const shallowSnapshot = doc.export({
-      mode: "shallow-snapshot",
-      frontiers: doc.frontiers(),
-    });
-    const snapshotBuffer = Buffer.from(shallowSnapshot);
-    db.prepare(`UPDATE ${snapshotTableName} SET snapshot = ?`).run(
-      snapshotBuffer,
-    );
-    db.prepare(`DELETE FROM ${updatesTableName}`).run();
+    await this.loadBatch(docId, location, doc);
+    await this.saveSnapshot(docId, location, doc.export({ mode: "snapshot" }));
+    if (vacuum) {
+      db.exec(`VACUUM`); // 压缩数据库
+    }
   }
 
   async saveUpdates(docId: string, location: string, updates: Uint8Array[]) {
@@ -209,7 +203,6 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
     const updatesTableName = getUpdatesTableName(docId);
     const updatesBuffer = updates.map((update) => Buffer.from(update));
     db.transaction((updates) => {
-      db.prepare(`DELETE FROM ${updatesTableName}`).run();
       const stmt = db.prepare(
         `INSERT INTO ${updatesTableName} (update_) VALUES (?)`,
       );

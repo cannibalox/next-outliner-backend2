@@ -1,4 +1,5 @@
 import { RESP_CODES } from "../common/constants";
+import { DeleteKbSchema } from "../common/type-and-schemas/api/kb";
 import {
   CreateKbSchema,
   GetAllKbInfoSchema,
@@ -56,6 +57,24 @@ export class KbController extends Controller {
           );
         // TODO
         throw new Error("Not implemented");
+      },
+    );
+
+    onPost(
+      "/kb/delete",
+      "删除知识库",
+      DeleteKbSchema.request,
+      DeleteKbSchema.result,
+      ["admin", "kb-editor"],
+      ({ location }, req) => {
+        if (req.role === "kb-editor" && req.location !== location) {
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无权限删除其他知识库",
+          );
+        }
+        this._kbService!.deleteKb(location);
+        return {};
       },
     );
   }

@@ -12,9 +12,11 @@ import { AuthMiddleware } from "./middleware/auth";
 import { KbController } from "./controller/kb";
 import { MiscController } from "./controller/misc";
 import { FsController } from "./controller/fs";
+import { loggerFastify } from "./utils/logger";
+import { LogsService } from "./service/logs";
 
 const main = async () => {
-  const services = autowireServices([ConfigService, KbService]);
+  const services = autowireServices([ConfigService, KbService, LogsService]);
   const controllers = autowireControllers(
     [AuthController, FsController, WsController, KbController, MiscController],
     services,
@@ -22,7 +24,10 @@ const main = async () => {
 
   const configService = services.get(ConfigService) as ConfigService;
   const config = configService.getConfig();
-  const fastify = Fastify(config);
+  const fastify = Fastify({
+    ...config,
+    logger: config.logger ? loggerFastify : false,
+  });
 
   fastify.register(cors);
   fastify.register(fastifyMultipart);

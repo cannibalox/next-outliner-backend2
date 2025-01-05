@@ -2,9 +2,9 @@ import { LoroDoc } from "loro-crdt";
 import { LeveldbPersistence } from "y-leveldb";
 import {
   BLOCK_DATA_DOC_NAME_PREFIX,
-  BLOCK_DATA_MAP_NAME,
+  DATA_MAP_NAME,
   BLOCK_INFO_DOC_NAME,
-  BLOCK_INFO_MAP_NAME,
+  DATA_MAP_NAME,
 } from "../common/constants";
 import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister/impl/sqlite";
 
@@ -18,9 +18,9 @@ const main = async () => {
   const yjsBlockDataMap = yjsBlockDataDoc0.getMap("blockData");
 
   const loroBaseDoc = new LoroDoc();
-  const loroBlockInfoMap = loroBaseDoc.getMap(BLOCK_INFO_MAP_NAME);
+  const loroBlockInfoMap = loroBaseDoc.getMap(DATA_MAP_NAME);
   const loroBlockDataDoc = new LoroDoc();
-  const loroBlockDataMap = loroBlockDataDoc.getMap(BLOCK_DATA_MAP_NAME);
+  const loroBlockDataMap = loroBlockDataDoc.getMap(DATA_MAP_NAME);
 
   for (const [k, v] of yjsBlockInfoMap.entries()) {
     if (yjsBlockDataMap.get(k)) {
