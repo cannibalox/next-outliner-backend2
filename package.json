@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "node -r ts-node/register src/main.ts",
-    "set-admin-password": "pnpm vite-node src/scripts/setAdminPassword.ts"
+    "gen-admin-password": "node -r ts-node/register src/scripts/getPasswordHash.ts"
   },
   "keywords": [],
   "author": "",
