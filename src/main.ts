@@ -14,6 +14,7 @@ import { MiscController } from "./controller/misc";
 import { FsController } from "./controller/fs";
 import { loggerFastify } from "./utils/logger";
 import { LogsService } from "./service/logs";
+import fs from "fs";
 
 const main = async () => {
   const services = autowireServices([ConfigService, KbService, LogsService]);
@@ -24,12 +25,26 @@ const main = async () => {
 
   const configService = services.get(ConfigService) as ConfigService;
   const config = configService.getConfig();
+
+  // https
+  const httpsOptions = config.https
+    ? {
+        https: {
+          key: fs.readFileSync(config.https.key),
+          cert: fs.readFileSync(config.https.cert),
+        },
+      }
+    : {};
+
   const fastify = Fastify({
     ...config,
     logger: config.logger ? loggerFastify : false,
+    ...httpsOptions,
   });
 
-  fastify.register(cors);
+  fastify.register(cors, {
+    origin: true, // use the origin of the request
+  });
   fastify.register(fastifyMultipart);
   controllers.registerToFastify(fastify);
   applyMiddlewares(fastify, [AuthMiddleware]);
