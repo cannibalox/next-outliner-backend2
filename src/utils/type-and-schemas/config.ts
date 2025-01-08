@@ -12,7 +12,7 @@ export const ConfigSchema = z.object({
   jwtSecret: z.string(),
   logger: z.boolean().default(true),
   maxParamLength: z.number().default(500),
-  knowledgeBases: z.string().array().min(1),
+  knowledgeBases: z.string().array(),
   newKnowledgeBasePathPrefix: z.string(),
   adminPasswordHash: z.string(),
   adminSalt: z.string(),
