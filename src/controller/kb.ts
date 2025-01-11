@@ -86,7 +86,7 @@ export class KbController extends Controller {
       "备份知识库",
       BackupKbSchema.request,
       BackupKbSchema.result,
-      ["admin"],
+      ["admin", "kb-editor"],
       ({ location }) => {
         const backupPath = this._kbService!.backupKb(location);
         return { backupPath };
