@@ -12,6 +12,8 @@ import dayjs from "dayjs";
 import { BLOCK_INFO_DOC_NAME, RESP_CODES } from "../common/constants";
 import { BusinessError } from "../utils/helper-functions/error";
 
+export const KB_DB_NAME = "app-data.db";
+
 export class KbService extends Service {
   private _configService: ConfigService | null = null;
   private _kbConfigDocs: Map<string, ReturnType<typeof parseDocument>> =
@@ -87,8 +89,7 @@ export class KbService extends Service {
     // 创建数据库
     try {
       const persister = new SqliteLoroDocPersister();
-      const date = dayjs().format("YYYYMMDDHHmmss");
-      const dbLocation = path.join(location, `db_${date}.sqlite`);
+      const dbLocation = path.join(location, KB_DB_NAME);
       persister.ensureDoc(BLOCK_INFO_DOC_NAME, dbLocation);
     } catch (error) {
       // 如果数据库创建失败，清理已创建的目录
@@ -130,5 +131,28 @@ export class KbService extends Service {
       if (info) ret.push({ name: info.name, location });
     }
     return ret;
+  }
+
+  backupKb(location: string) {
+    const config = this._configService!.getConfig();
+    if (!config.knowledgeBases.includes(location)) {
+      throw new BusinessError(
+        RESP_CODES.TARGET_NOT_FOUND,
+        `要备份的知识库 ${location} 不存在`,
+      );
+    }
+    const dbFilePath = path.join(location, KB_DB_NAME);
+    if (!fs.existsSync(dbFilePath)) {
+      throw new BusinessError(
+        RESP_CODES.TARGET_NOT_FOUND,
+        `要备份的知识库 ${location} 数据库文件不存在`,
+      );
+    }
+    const backupPath = path.join(
+      location,
+      `backup-${dayjs().format("YYYYMMDDHHmmss")}.db`,
+    );
+    fs.copyFileSync(dbFilePath, backupPath);
+    return backupPath;
   }
 }

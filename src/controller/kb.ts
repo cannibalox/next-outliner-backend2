@@ -1,5 +1,8 @@
 import { RESP_CODES } from "../common/constants";
-import { DeleteKbSchema } from "../common/type-and-schemas/api/kb";
+import {
+  BackupKbSchema,
+  DeleteKbSchema,
+} from "../common/type-and-schemas/api/kb";
 import {
   CreateKbSchema,
   GetAllKbInfoSchema,
@@ -75,6 +78,18 @@ export class KbController extends Controller {
         }
         this._kbService!.deleteKb(location);
         return {};
+      },
+    );
+
+    onPost(
+      "/kb/backup",
+      "备份知识库",
+      BackupKbSchema.request,
+      BackupKbSchema.result,
+      ["admin"],
+      ({ location }) => {
+        const backupPath = this._kbService!.backupKb(location);
+        return { backupPath };
       },
     );
   }
