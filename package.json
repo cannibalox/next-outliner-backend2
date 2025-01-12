@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "node -r ts-node/register src/main.ts",
+    "dev": "tsx src/main.ts",
     "gen-admin-password": "node -r ts-node/register src/scripts/getPasswordHash.ts"
   },
   "keywords": [],
@@ -14,6 +14,7 @@
     "@types/node": "^20.12.12",
     "prettier": "3.2.5",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.4.5"
   },
   "dependencies": {
