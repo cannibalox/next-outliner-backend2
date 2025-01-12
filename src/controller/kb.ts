@@ -2,6 +2,7 @@ import { RESP_CODES } from "../common/constants";
 import {
   BackupKbSchema,
   DeleteKbSchema,
+  ListAllBackupsSchema,
 } from "../common/type-and-schemas/api/kb";
 import {
   CreateKbSchema,
@@ -87,9 +88,32 @@ export class KbController extends Controller {
       BackupKbSchema.request,
       BackupKbSchema.result,
       ["admin", "kb-editor"],
-      ({ location }) => {
+      ({ location }, req) => {
+        if (req.role === "kb-editor" && req.location !== location) {
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无权限备份此知识库",
+          );
+        }
         const backupPath = this._kbService!.backupKb(location);
         return { backupPath };
+      },
+    );
+
+    onPost(
+      "/kb/listAllBackups",
+      "获取知识库备份列表",
+      ListAllBackupsSchema.request,
+      ListAllBackupsSchema.result,
+      ["admin", "kb-editor"],
+      ({ location }, req) => {
+        if (req.role === "kb-editor" && req.location !== location) {
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无权限查看此知识库的备份",
+          );
+        }
+        return this._kbService!.listAllBackups(location);
       },
     );
   }
