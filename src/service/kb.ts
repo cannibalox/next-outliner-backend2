@@ -13,6 +13,7 @@ import { BLOCK_INFO_DOC_NAME, RESP_CODES } from "../common/constants";
 import { BusinessError } from "../utils/helper-functions/error";
 
 export const KB_DB_NAME = "app-data.db";
+export const BACKUP_FOLDER_NAME = "backups";
 
 export class KbService extends Service {
   private _configService: ConfigService | null = null;
@@ -150,9 +151,27 @@ export class KbService extends Service {
     }
     const backupPath = path.join(
       location,
+      BACKUP_FOLDER_NAME,
       `backup-${dayjs().format("YYYYMMDDHHmmss")}.db`,
     );
     fs.copyFileSync(dbFilePath, backupPath);
     return backupPath;
+  }
+
+  listAllBackups(location: string) {
+    const backupFolderPath = path.join(location, BACKUP_FOLDER_NAME);
+    if (!fs.existsSync(backupFolderPath)) return [];
+    return fs.readdirSync(backupFolderPath).map((fileName) => {
+      const filePath = path.join(backupFolderPath, fileName);
+      const stats = fs.statSync(filePath);
+      return {
+        name: fileName,
+        size: stats.size,
+      };
+    });
+  }
+
+  shrinkKb(location: string) {
+    throw new Error("Not implemented");
   }
 }

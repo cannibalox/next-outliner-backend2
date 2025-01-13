@@ -373,6 +373,7 @@ export class FsController extends Controller {
           const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
           const chunkSize = end - start + 1;
           const stream = fs.createReadStream(targetPath, { start, end });
+          const encodedFileName = encodeURIComponent(path.basename(targetPath));
           return reply
             .code(206)
             .headers({
@@ -380,18 +381,19 @@ export class FsController extends Controller {
               "Accept-Ranges": "bytes",
               "Content-Length": chunkSize,
               "Content-Type": mimeType,
-              "Content-Disposition": `${attachment ? "attachment; " : ""}filename="${path.basename(targetPath)}"`,
+              "Content-Disposition": `${attachment ? "attachment; " : ""}filename="${encodedFileName}"`,
             })
             .send(stream);
         }
         // 处理普通请求
         else {
           const stream = fs.createReadStream(targetPath);
+          const encodedFileName = encodeURIComponent(path.basename(targetPath));
           return reply
             .headers({
               "Content-Length": fileSize,
               "Content-Type": mimeType,
-              "Content-Disposition": `${attachment ? "attachment; " : ""}filename="${path.basename(targetPath)}"`,
+              "Content-Disposition": `${attachment ? "attachment; " : ""}filename="${encodedFileName}"`,
             })
             .send(stream);
         }

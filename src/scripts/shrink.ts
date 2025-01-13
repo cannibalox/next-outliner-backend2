@@ -6,7 +6,7 @@ import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister
 import fs from "fs";
 
 (async () => {
-  const location = "testdb/app-data22222.db";
+  const location = "testdb/app-data.db";
   const beforeSize = fs.statSync(location).size;
   const persister = new SqliteLoroDocPersister();
   await persister.shrinkDoc(BLOCK_INFO_DOC_NAME, location);
