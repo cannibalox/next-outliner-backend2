@@ -83,7 +83,7 @@ export class KbController extends Controller {
     );
 
     onPost(
-      "/kb/backup",
+      "/kb/backup/create",
       "备份知识库",
       BackupKbSchema.request,
       BackupKbSchema.result,
@@ -101,7 +101,7 @@ export class KbController extends Controller {
     );
 
     onPost(
-      "/kb/listAllBackups",
+      "/kb/backup/listAll",
       "获取知识库备份列表",
       ListAllBackupsSchema.request,
       ListAllBackupsSchema.result,
