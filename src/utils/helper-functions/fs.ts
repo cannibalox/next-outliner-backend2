@@ -73,9 +73,24 @@ export const ls = (
         level < (options.maxDepth ?? Infinity)
       ) {
         const subDirents = recur(path.join(baseDir, name), level + 1);
-        result[name] = { isDirectory: true, name, subDirents };
+        const stats = fs.statSync(path.join(baseDir, name));
+        result[name] = {
+          isDirectory: true,
+          name,
+          ctime: stats.ctime,
+          mtime: stats.mtime,
+          size: stats.size,
+          subDirents,
+        };
       } else {
-        result[name] = { isDirectory: false, name };
+        const stats = fs.statSync(path.join(baseDir, name));
+        result[name] = {
+          isDirectory: false,
+          name,
+          ctime: stats.ctime,
+          mtime: stats.mtime,
+          size: stats.size,
+        };
       }
     }
     return result;
