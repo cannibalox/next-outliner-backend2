@@ -2,9 +2,11 @@ import { z } from "zod";
 import { RESP_CODES } from "../common/constants";
 import {
   ClearScannedImageSchema,
+  FsDeleteSchema,
   FsEnsureAttachmentsDirSchema,
   FsGetAttachmentSignedUrlSchema,
   FsLsSchema,
+  FsRenameSchema,
   FsStatSchema,
 } from "../common/type-and-schemas/api/fs";
 import { ConfigService } from "../service/config";
@@ -404,5 +406,44 @@ export class FsController extends Controller {
           .send({ success: false, code: RESP_CODES.UNKNOWN_ERROR });
       }
     });
+
+    onPost(
+      "/fs/delete",
+      "删除文件",
+      FsDeleteSchema.request,
+      FsDeleteSchema.result,
+      ["admin", "kb-editor"],
+      ({ path: relativePath }, req) => {
+        const { location } = req;
+        if (!location)
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无法访问该路径",
+          );
+        const absPath = path.join(location, ATTACHMENT_FOLDER, relativePath);
+        fs.rmSync(absPath);
+        return {};
+      },
+    );
+
+    onPost(
+      "/fs/rename",
+      "重命名文件",
+      FsRenameSchema.request,
+      FsRenameSchema.result,
+      ["admin", "kb-editor"],
+      ({ path: relativePath, newName }, req) => {
+        const { location } = req;
+        if (!location)
+          throw new BusinessError(
+            RESP_CODES.NO_AUTHORIZATION,
+            "无法访问该路径",
+          );
+        const oldAbsPath = path.join(location, ATTACHMENT_FOLDER, relativePath);
+        const newAbsPath = path.join(location, ATTACHMENT_FOLDER, newName);
+        fs.renameSync(oldAbsPath, newAbsPath);
+        return {};
+      },
+    );
   }
 }
