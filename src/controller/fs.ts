@@ -145,6 +145,7 @@ export class FsController extends Controller {
                 fs.mkdirSync(path.dirname(targetPath), { recursive: true });
               // 将文件存到目标位置
               if (part.type === "file") {
+                console.log("write file to ", targetPath);
                 part.file.pipe(ws);
                 part.file.on("end", resolve);
                 part.file.on("error", reject);
@@ -156,6 +157,7 @@ export class FsController extends Controller {
                   else resolve(undefined);
                 });
               }
+              targetPath = null;
             });
           }
         }
@@ -368,7 +370,7 @@ export class FsController extends Controller {
         const stat = fs.statSync(targetPath);
         const fileSize = stat.size;
         const { range } = req.headers;
-        // 处理 range 请求（断点续传）
+        // 处理 range 请求
         if (range) {
           const parts = range.replace(/bytes=/, "").split("-");
           const start = parseInt(parts[0], 10);

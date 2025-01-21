@@ -149,9 +149,11 @@ export class KbService extends Service {
         `要备份的知识库 ${location} 数据库文件不存在`,
       );
     }
+    const backupFolderPath = path.join(location, BACKUP_FOLDER_NAME);
+    if (!fs.existsSync(backupFolderPath))
+      fs.mkdirSync(backupFolderPath, { recursive: true });
     const backupPath = path.join(
-      location,
-      BACKUP_FOLDER_NAME,
+      backupFolderPath,
       `backup-${dayjs().format("YYYYMMDDHHmmss")}.db`,
     );
     fs.copyFileSync(dbFilePath, backupPath);

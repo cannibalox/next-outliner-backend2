@@ -72,8 +72,9 @@ export const ls = (
         options.recursive &&
         level < (options.maxDepth ?? Infinity)
       ) {
-        const subDirents = recur(path.join(baseDir, name), level + 1);
-        const stats = fs.statSync(path.join(baseDir, name));
+        const absPath = path.join(baseDir, name);
+        const subDirents = recur(absPath, level + 1);
+        const stats = fs.statSync(absPath);
         result[name] = {
           isDirectory: true,
           name,
@@ -83,7 +84,8 @@ export const ls = (
           subDirents,
         };
       } else {
-        const stats = fs.statSync(path.join(baseDir, name));
+        const absPath = path.join(baseDir, name);
+        const stats = fs.statSync(absPath);
         result[name] = {
           isDirectory: false,
           name,
