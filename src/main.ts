@@ -45,7 +45,11 @@ const main = async () => {
   fastify.register(cors, {
     origin: true, // use the origin of the request
   });
-  fastify.register(fastifyMultipart);
+  fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: config.maxFileSize * 1024 * 1024,
+    },
+  });
   controllers.registerToFastify(fastify);
   applyMiddlewares(fastify, [AuthMiddleware]);
 
