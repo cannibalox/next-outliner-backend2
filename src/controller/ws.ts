@@ -11,6 +11,7 @@ import { ServerNetworkSetupTool } from "../utils/helper-functions/loro/setupNetw
 import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister/impl/sqlite";
 import { MockCoordinator } from "../utils/helper-functions/loro/coordinator/mockCoordinator";
 import { ShrinkKbSchema } from "../common/type-and-schemas/api/kb";
+import { KB_DB_NAME } from "../service/kb";
 
 export class WsController extends Controller {
   private _wsNetwork: WebsocketServerNetwork | null = null;
@@ -85,7 +86,8 @@ export class WsController extends Controller {
       ["admin"],
       async ({ location }) => {
         const persister = this._setupTool!.persister;
-        const result = await persister.shrinkAll(location);
+        const dbLocation = path.join(location, KB_DB_NAME);
+        const result = await persister.shrinkAll(dbLocation);
         return result;
       },
     );
