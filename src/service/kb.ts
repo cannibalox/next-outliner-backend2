@@ -172,8 +172,4 @@ export class KbService extends Service {
       };
     });
   }
-
-  shrinkKb(location: string) {
-    throw new Error("Not implemented");
-  }
 }

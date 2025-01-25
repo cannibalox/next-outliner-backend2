@@ -16,6 +16,7 @@ export const ConfigSchema = z.object({
   newKnowledgeBasePathPrefix: z.string(),
   adminPasswordHash: z.string(),
   adminSalt: z.string(),
+  maxFileSize: z.number().default(50),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

@@ -5,7 +5,7 @@ import Database, {
 import { LoroDoc } from "loro-crdt";
 import { captureError } from "../../../error";
 import { LoroDocPersister } from "../interface/persister";
-import { DATA_MAP_NAME } from "../../../../../common/constants";
+import fs from "fs";
 
 const tableExists = (db: SqliteDatabase, tableName: string) => {
   const sql = `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`;
@@ -190,12 +190,33 @@ export class SqliteLoroDocPersister implements LoroDocPersister {
 
   async shrinkDoc(docId: string, location: string, vacuum: boolean = true) {
     const db = this._openExistedDb(location);
+    const beforeSize = fs.statSync(location).size;
     const doc = new LoroDoc();
     await this.loadBatch(docId, location, doc);
     await this.saveSnapshot(docId, location, doc.export({ mode: "snapshot" }));
     if (vacuum) {
       db.exec(`VACUUM`); // 压缩数据库
     }
+    const afterSize = fs.statSync(location).size;
+    return { beforeSize, afterSize };
+  }
+
+  async shrinkAll(location: string, vacuum: boolean = true) {
+    const db = this._openExistedDb(location);
+    const beforeSize = fs.statSync(location).size;
+    const allDocIds = await this.getAllDocIds(location);
+    for (const docId of allDocIds) {
+      const doc = new LoroDoc();
+      await this.loadBatch(docId, location, doc);
+      await this.saveSnapshot(
+        docId,
+        location,
+        doc.export({ mode: "snapshot" }),
+      );
+    }
+    db.exec(`VACUUM`); // 压缩数据库
+    const afterSize = fs.statSync(location).size;
+    return { beforeSize, afterSize };
   }
 
   async saveUpdates(docId: string, location: string, updates: Uint8Array[]) {
