@@ -18,7 +18,21 @@ export type LoroDocPersister = {
     location: string,
     snapshot: Uint8Array,
   ) => Promise<void>;
-  shrinkDoc: (docId: string, location: string) => Promise<void>;
+  shrinkAll: (
+    location: string,
+    vacuum?: boolean,
+  ) => Promise<{
+    beforeSize: number;
+    afterSize: number;
+  }>;
+  shrinkDoc: (
+    docId: string,
+    location: string,
+    vacuum?: boolean,
+  ) => Promise<{
+    beforeSize: number;
+    afterSize: number;
+  }>;
   saveUpdates: (
     docId: string,
     location: string,

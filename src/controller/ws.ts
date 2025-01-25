@@ -10,20 +10,22 @@ import {
 import { ServerNetworkSetupTool } from "../utils/helper-functions/loro/setupNetwork";
 import { SqliteLoroDocPersister } from "../utils/helper-functions/loro/persister/impl/sqlite";
 import { MockCoordinator } from "../utils/helper-functions/loro/coordinator/mockCoordinator";
+import { ShrinkKbSchema } from "../common/type-and-schemas/api/kb";
 
 export class WsController extends Controller {
   private _wsNetwork: WebsocketServerNetwork | null = null;
+  private _setupTool: ServerNetworkSetupTool | null = null;
 
   init(context: ControllerInitContext): void {
     this._wsNetwork = new WebsocketServerNetwork();
-    const setupTool = new ServerNetworkSetupTool(
+    this._setupTool = new ServerNetworkSetupTool(
       new SqliteLoroDocPersister(),
       new MockCoordinator(),
     );
-    setupTool.setup(this._wsNetwork);
+    this._setupTool.setup(this._wsNetwork);
   }
 
-  registerHandlers({ fastify }: RegisterHandlerParams): void {
+  registerHandlers({ onPost, fastify }: RegisterHandlerParams): void {
     fastify.server.on("upgrade", (req, socket, head) => {
       // parse url
       let url;
@@ -74,5 +76,18 @@ export class WsController extends Controller {
         wss.emit("connection", ws, { location: dbLocation }); // 将 location 作为参数传递给事件处理器
       });
     });
+
+    onPost(
+      "/kb/shrink",
+      "压缩数据库",
+      ShrinkKbSchema.request,
+      ShrinkKbSchema.result,
+      ["admin"],
+      async ({ location }) => {
+        const persister = this._setupTool!.persister;
+        const result = await persister.shrinkAll(location);
+        return result;
+      },
+    );
   }
 }
