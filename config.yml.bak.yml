@@ -1,0 +1,27 @@
+host: 0.0.0.0 # Listen address
+port: 8081 # Listen port
+# Paths to HTTPS key and certificate files. If HTTPS is not needed, these can be omitted
+https:
+  key: ../ssl.key
+  cert: ../ssl.crt
+# Replace with a randomly generated string
+jwtSecret: "xDH$tkGcuh;C=F#g+X3-kB5t?;L/T5a%wz}ay!G8/6d3mBC.p4j$(y4_HL&:zhD8(%P\
+  ;K:q(*1Fxe8q_R9)dgzy8:4))BhvNJwM:K6Q5e1&x7teFQ{n4y6j4b]u&Ku]qw)YS3R[8m)&=3@Yq\
+  iu,)t}J={SU(h9vn[Q*V(8{-G,JHB?ABU/=mzry7qW&.=u*6m?B$j3f_u{!cfe&/9;XH90$$FDcdd\
+  g4A+A%;qr*{QQ}bKt-minm4,x3VUw==2$z"
+
+logger: true # Whether to print logs
+maxParamLength: 500 # Do not modify
+newKnowledgeBasePathPrefix:  ../pkm  #D:/next-outliner/pkm Path prefix for new knowledge bases
+adminPasswordHash: 604bf0e447dfe2e1214a9daff440a0341e4b8cbcea8e308f06ccd6027143ec1dd623af2e1e247c46532cf3aa6d9095ccb542fd24162c366d08fd4bfde9afef67
+adminSalt: 8d221759a51c9ca6caf14b6bcc3dc9ee
+maxFileSize: 400
+
+# Knowledge base paths, leave empty
+knowledgeBases:
+  - D:/next-outliner/pkm/pkm
+  - D:/next-outliner/pkm/pkm
+  - D:/next-outliner/pkm/test2
+  - D:/next-outliner/pkm/test
+  - D:/next-outliner/pkm/test2
+  - D:/next-outliner/pkm/new-kb
